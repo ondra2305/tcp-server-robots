@@ -1,16 +1,16 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+8 to toggle the breakpoint.
+import sys
+import socket
+from config import *
+from server import Server
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+def main():
+    my_server = Server()
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    my_socket.bind(SERVER_ADDR)
+    my_server.start_server(my_socket)
+
+
+if __name__ == "__main__":
+    main()
