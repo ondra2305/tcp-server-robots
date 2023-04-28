@@ -1,5 +1,8 @@
 from config import *
 import math
+import random
+from collections import deque
+
 
 def calc_client_hash(username):
     if len(username) > 20:
@@ -50,74 +53,139 @@ def calc_cl_key(cl_hash, kid):
 class Robot:
     def __init__(self):
         self.direction = None
-        self.xPos = None
-        self.yPos = None
+        self.prev_x = None
+        self.prev_y = None
+        self.obstacle_dodging = False
         self.first_move = True
+        self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
+                              SERVER_TURN_RIGHT, SERVER_MOVE]
+        self.wanted_direction = None
+        self.corrected = False
+
+    def get_wanted_direction(self, x, y):
+        bigger = max(abs(x), abs(y))
+
+        if bigger == abs(x):
+            if x > 0:
+                return 'W'
+            elif x < 0:
+                return 'E'
+            elif x == 0:
+                if y > 0:
+                    return 'S'
+                else:
+                    return 'N'
+        elif bigger == abs(y):
+            if y > 0:
+                return 'S'
+            elif y < 0:
+                return 'N'
+            elif y == 0:
+                if x > 0:
+                    return 'W'
+                else:
+                    return 'E'
+
+    def get_direction(self, x, y):
+        if x > self.prev_x:
+            return 'E'
+        elif x < self.prev_x:
+            return 'W'
+        elif y > self.prev_y:
+            return 'N'
+        elif y < self.prev_y:
+            return 'S'
 
     def move_to_0(self, x, y):
+        # DO NOT EDIT
         y = y.split('\a\b')[0]
-        print(f'My pos: {x},{y}')
+        print(f'My new pos: {x},{y}')
+        print(f'Direction: {self.direction}')
+        x = int(x)
+        y = int(y)
+        if self.direction is not None:
+            print(f"Direction based on previous: {self.get_direction(x, y)}")
 
-        self.xPos = int(x)
-        self.yPos = int(y)
-
-        distance = math.sqrt(self.xPos**2 + self.yPos**2)
-
-        if distance == 0:
-            return SERVER_PICK_UP
 
         if self.first_move:
+            print(f"First move - p1")
+            self.prev_x = x
+            self.prev_y = y
             self.first_move = False
             return SERVER_MOVE
+        elif self.direction is None and not self.obstacle_dodging:
+            print(f"First move - p2")
 
-        if self.direction is None:
-            if self.xPos > 0:
-                self.direction = 'W'
-            elif self.xPos < 0:
-                self.direction = 'E'
-            elif self.yPos > 0:
+            self.direction = self.get_direction(x, y)
+            self.wanted_direction = self.get_wanted_direction(x, y)
+            if self.direction == self.wanted_direction:
+                self.wanted_direction = None
+            self.prev_x = x
+            self.prev_y = y
+
+
+            print(f"Direction set to: {self.direction}")
+            print(f"Wanted direction: {self.wanted_direction}")
+
+        if x == 0 and y == 0:
+            return SERVER_PICK_UP
+        elif self.prev_x == x and self.prev_y == y and not self.obstacle_dodging:
+            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            print(f"OBSTACLE HIT {x} {y}")
+            self.obstacle_dodging = True
+            move = self.dodging_moves[0]
+            print(f"Dodging, move now is {move}")
+            self.dodging_moves = self.dodging_moves[1:]
+            self.prev_x = x
+            self.prev_y = y
+            return move
+        elif self.obstacle_dodging:
+            if len(self.dodging_moves) == 0:
+                self.obstacle_dodging = False
+                self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
+                                      SERVER_TURN_RIGHT, SERVER_MOVE]
+                print("Dodging complete, moving forward")
+                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+
+                #if self.direction is None:
+                #    self.direction = self.get_direction(x, y)
+                #    print(f"Direction now {self.direction}")
+
+                self.prev_x = x
+                self.prev_y = y
+                return SERVER_MOVE
+            move = self.dodging_moves[0]
+            print(f"Dodging, move now is {move}")
+            self.dodging_moves = self.dodging_moves[1:]
+            self.prev_x = x
+            self.prev_y = y
+            return move
+        elif self.direction != self.wanted_direction:
+            print(f"Direction is not right, wanted {self.wanted_direction}, now {self.direction}")
+            if self.direction == 'W' and self.wanted_direction == 'S':
                 self.direction = 'S'
-            elif self.yPos < 0:
-                self.direction = 'N'
-
-        if self.direction == 'E':
-            if self.xPos > 0:
-                return SERVER_MOVE
-            elif self.yPos < 0:
-                self.direction = 'N'
                 return SERVER_TURN_LEFT
-            else:
-                self.direction = 'S'
-                return SERVER_TURN_RIGHT
-
-        elif self.direction == 'W':
-            if self.xPos < 0:
-                return SERVER_MOVE
-            elif self.yPos > 0:
-                self.direction = 'S'
-                return SERVER_TURN_LEFT
-            else:
-                self.direction = 'N'
-                return SERVER_TURN_RIGHT
-
-        elif self.direction == 'N':
-            if self.yPos > 0:
-                return SERVER_MOVE
-            elif self.xPos > 0:
-                self.direction = 'W'
-                return SERVER_TURN_LEFT
-            else:
+            if self.direction == 'S' and self.wanted_direction == 'E':
                 self.direction = 'E'
                 return SERVER_TURN_RIGHT
-
-        elif self.direction == 'S':
-            if self.yPos < 0:
-                return SERVER_MOVE
-            elif self.xPos < 0:
+            if self.direction == 'N' and self.wanted_direction == 'E':
                 self.direction = 'E'
-                return SERVER_TURN_LEFT
-            else:
-                self.direction = 'W'
                 return SERVER_TURN_RIGHT
-
-        return SERVER_MOVE
+            if self.direction == 'N' and self.wanted_direction == 'W':
+                self.direction = 'W'
+                return SERVER_TURN_LEFT
+            if self.direction == 'E' and self.wanted_direction == 'S':
+                self.direction = 'S'
+                return SERVER_TURN_RIGHT
+            else:
+                print(f"Direction is not right, wanted {self.wanted_direction}, now {self.direction}")
+        else:
+            print("Move forward:")
+            if x == 0 or y == 0 and not self.corrected:
+                print("Hit 0 on one of the axis")
+                self.wanted_direction = self.get_wanted_direction(x, y)
+                self.corrected = True
+            self.prev_x = x
+            self.prev_y = y
+            return SERVER_MOVE
