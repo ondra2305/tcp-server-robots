@@ -44,6 +44,18 @@ class Server:
                     break
                 with lock:
                     message += data
+                    if "\a\b" not in data:
+                        if self.connected_clients[thread_id]['con_state'] == 'connected':
+                            if len(message) >= 19:
+                                raise SyntaxError("Wrong username!")
+                        elif self.connected_clients[thread_id]['con_state'] == 'move':
+                            if len(message) >= 11:
+                                raise SyntaxError("Confirmation too long!")
+                        elif self.connected_clients[thread_id]['con_state'] == 'pickup':
+                            if len(message) >= 99:
+                                raise SyntaxError("Message too long!")
+                    print("RECV MSG:")
+                    print(message)
                 while "\a\b" in message:
                     message_parts = message.split("\a\b")
                     message = message_parts.pop()
@@ -56,7 +68,7 @@ class Server:
                             print(f"Last was charging? {last_was_charging}")
                             print(f"Message from [{addr}]: {part}\a\b, TI {thread_id}")
                             if last_was_charging and "FULL POWER" not in part:
-                                raise SyntaxError("Did not recieve FULL POWER!")
+                                raise SystemError("Did not recieve FULL POWER!")
                             last_was_charging = False
                             if "RECHARGING" in part:
                                 conn.settimeout(5)
@@ -80,8 +92,11 @@ class Server:
             except socket.timeout:
                 print(f"Connection timed out for {addr}.")
                 break
-            except SyntaxError:
+            except SystemError:
                 conn.sendall(SERVER_LOGIC_ERROR.encode(MSG_FORMAT))
+                break
+            except SyntaxError:
+                conn.sendall(SERVER_SYNTAX_ERROR.encode(MSG_FORMAT))
                 break
 
         conn.close()
