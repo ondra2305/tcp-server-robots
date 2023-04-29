@@ -157,12 +157,26 @@ class Robot:
             return SERVER_TURN_RIGHT
 
     def move_to_0(self, x, y):
-        # DO NOT EDIT
         y = y.split('\a\b')[0]
+
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         print(f'My new pos: {x},{y}')
+
+        if "." in x:
+            x_float = True
+        else:
+            x_float = False
+        if "." in y:
+            y_float = True
+        else:
+            y_float = False
+
+        if x_float or y_float:
+            return SERVER_SYNTAX_ERROR
+
         x = int(x)
         y = int(y)
+
         self.visited.add((x, y))
         print("Visited:")
         print(self.visited)
@@ -278,12 +292,12 @@ class Robot:
             self.prev_x = x
             self.prev_y = y
             if self.direction == "N":
-                self.expected = (x, y+1)
+                self.expected = (x, y + 1)
             elif self.direction == "S":
-                self.expected = (x, y-1)
+                self.expected = (x, y - 1)
             elif self.direction == "W":
-                self.expected = (x-1, y)
+                self.expected = (x - 1, y)
             elif self.direction == "E":
-                self.expected = (x+1, y)
+                self.expected = (x + 1, y)
             self.commands.append(SERVER_MOVE)
             return SERVER_MOVE

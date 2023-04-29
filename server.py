@@ -4,7 +4,7 @@ import numpy as np
 
 from config import *
 from helpers import *
-
+import uuid
 
 class Server:
     def __init__(self):
@@ -16,7 +16,7 @@ class Server:
         print(f"Server is listening on: {SERVER}")
         while True:
             conn, addr = my_socket.accept()
-            thread_id = threading.get_ident()
+            thread_id = str(uuid.uuid4())
             thread = threading.Thread(target=self.handle_cl_conn, args=(conn, addr, thread_id))
             self.connected_clients[thread_id] = {
                 'con_state': 'connected',
@@ -35,31 +35,34 @@ class Server:
         conn.settimeout(1)
         connected = True
         message = ""
+        lock = threading.Lock()
         while connected:
             try:
                 data = conn.recv(1024).decode(MSG_FORMAT)
                 if not data:
                     break
-                message += data
-                if message.endswith('\a\b'):
-                    #message = message[:-2]
-                    print(f"Message from [{addr}]: {message}")
-                    response = self.process_data(message, thread_id, robot)
-                    conn.sendall(response.encode(MSG_FORMAT))
-                    if response in [SERVER_LOGIN_FAILED, SERVER_KEY_OUT_OF_RANGE_ERROR, SERVER_LOGIC_ERROR,
-                                    SERVER_SYNTAX_ERROR, SERVER_LOGOUT]:
-                        connected = False
-                        break
-                    elif response == SERVER_OK:
-                        conn.sendall(SERVER_MOVE.encode(MSG_FORMAT))
-                    message = ""
+                with lock:
+                    message += data
+                messages = message.split("\a\b")
+                for i in range(len(messages) - 1):
+                    message = messages[i] + "\a\b"
+                    with lock:
+                        print(f"Message from [{addr}]: {message}, TI {thread_id}")
+                        response = self.process_data(message, thread_id, robot)
+                        conn.sendall(response.encode(MSG_FORMAT))
+                        if response in [SERVER_LOGIN_FAILED, SERVER_KEY_OUT_OF_RANGE_ERROR, SERVER_LOGIC_ERROR,
+                                        SERVER_SYNTAX_ERROR, SERVER_LOGOUT]:
+                            connected = False
+                            break
+                        elif response == SERVER_OK:
+                            conn.sendall(SERVER_MOVE.encode(MSG_FORMAT))
+                message = messages[-1]
             except socket.timeout:
                 print(f"Connection timed out for {addr}.")
                 break
 
         conn.close()
         print(f"Client at {addr} disconnected.")
-
     def process_data(self, data, thread_id, robot):
         messages = data.split('\a\b')
         response = SERVER_SYNTAX_ERROR
@@ -105,7 +108,7 @@ class Server:
             kid = self.connected_clients[thread_id]['key_id']
             print(f'Cl hash: _{hashcalc}_')
             print(f'Key recv: _{messages[0]}_')
-            if recvkey > 99999:
+            if recvkey > 99999 or messages[0].endswith(" "):
                 response = SERVER_SYNTAX_ERROR
             elif calc_cl_key(hashcalc, kid) == recvkey:
                 self.connected_clients[thread_id]['con_state'] = 'move'
@@ -113,7 +116,9 @@ class Server:
             else:
                 response = SERVER_LOGIN_FAILED
         elif state == 'move':
-            print(f'Move: {msg}')
+            print(f'Move: _{msg}_')
+            if msg.endswith(" "):
+                return SERVER_SYNTAX_ERROR
             msg = data.split(' ')
             response = robot.move_to_0(msg[1], msg[2])
             if response == SERVER_PICK_UP:
