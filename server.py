@@ -59,13 +59,10 @@ class Server:
                 while "\a\b" in message:
                     message_parts = message.split("\a\b")
                     message = message_parts.pop()
-                    print("Message parts:")
                     print(message_parts)
                     for part in message_parts:
-                        print("Part:")
                         print(part)
                         with lock:
-                            print(f"Last was charging? {last_was_charging}")
                             print(f"Message from [{addr}]: {part}\a\b, TI {thread_id}")
                             if last_was_charging and "FULL POWER" not in part:
                                 raise SystemError("Did not recieve FULL POWER!")
@@ -77,7 +74,6 @@ class Server:
                             elif "FULL POWER" in part:
                                 conn.settimeout(1)
                                 part = part.replace("FULL POWER", "")
-                            print("Part now:")
                             print(part)
                             if part == "":
                                 continue
