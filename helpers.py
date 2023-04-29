@@ -1,7 +1,5 @@
 from config import *
-import math
 import random
-from collections import deque
 
 
 def calc_client_hash(username):
@@ -21,33 +19,11 @@ def calc_client_hash(username):
 
 
 def calc_srv_key(cl_hash, kid):
-    res = None
-    if kid == 0:
-        res = (cl_hash + S_KEY0) % 65536
-    elif kid == 1:
-        res = (cl_hash + S_KEY1) % 65536
-    elif kid == 2:
-        res = (cl_hash + S_KEY2) % 65536
-    elif kid == 3:
-        res = (cl_hash + S_KEY3) % 65536
-    elif kid == 4:
-        res = (cl_hash + S_KEY4) % 65536
-    return res
+    return (cl_hash + S_KEYS[kid]) % 65536
 
 
 def calc_cl_key(cl_hash, kid):
-    res = None
-    if kid == 0:
-        res = (cl_hash + C_KEY0) % 65536
-    elif kid == 1:
-        res = (cl_hash + C_KEY1) % 65536
-    elif kid == 2:
-        res = (cl_hash + C_KEY2) % 65536
-    elif kid == 3:
-        res = (cl_hash + C_KEY3) % 65536
-    elif kid == 4:
-        res = (cl_hash + C_KEY4) % 65536
-    return res
+    return (cl_hash + C_KEYS[kid]) % 65536
 
 
 class Robot:
@@ -59,11 +35,14 @@ class Robot:
         self.first_move = True
         self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
                               SERVER_TURN_RIGHT, SERVER_MOVE]
+        self.dodging_moves_R = [SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_TURN_LEFT, SERVER_MOVE, SERVER_MOVE,
+                                SERVER_TURN_LEFT, SERVER_MOVE]
+        self.dodging_moves_L = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
+                                SERVER_TURN_RIGHT, SERVER_MOVE]
         self.wanted_direction = None
         self.obstacle_first = False
-        self.second_move = True
+        self.second_move = False
         self.commands = []
-        self.visited = set()
         self.expected = ()
 
     def get_wanted_direction(self, x, y):
@@ -156,6 +135,19 @@ class Robot:
             self.direction = 'W'
             return SERVER_TURN_RIGHT
 
+        if self.direction == self.wanted_direction:
+            return SERVER_MOVE
+
+    def set_expected(self, x, y):
+        if self.direction == "N":
+            self.expected = (x, y + 1)
+        elif self.direction == "S":
+            self.expected = (x, y - 1)
+        elif self.direction == "W":
+            self.expected = (x - 1, y)
+        elif self.direction == "E":
+            self.expected = (x + 1, y)
+
     def move_to_0(self, x, y):
         y = y.split('\a\b')[0]
 
@@ -177,13 +169,10 @@ class Robot:
         x = int(x)
         y = int(y)
 
-        self.visited.add((x, y))
-        print("Visited:")
-        print(self.visited)
         print("Expected:")
         print(self.expected)
         if len(self.commands) > 0:
-            if self.commands[-1:] == [SERVER_MOVE]:
+            if self.commands[-1:] == [SERVER_MOVE] and not self.second_move:
                 self.direction = self.get_direction(x, y)
                 print(f"Direction: {self.get_direction(x, y)}")
                 self.wanted_direction = self.get_wanted_direction(x, y)
@@ -193,25 +182,33 @@ class Robot:
         if len(self.commands) > 0:
             print(self.commands)
 
-        if self.first_move or self.second_move:
+        if self.first_move:
             if x == 0 and y == 0:
                 self.commands.append(SERVER_PICK_UP)
                 return SERVER_PICK_UP
-            if self.first_move:
-                print(f"First move")
-                self.first_move = False
-                self.prev_x = x
-                self.prev_y = y
-                self.first_move = False
-                self.commands.append(SERVER_MOVE)
-                return SERVER_MOVE
-            elif self.prev_x == x and self.prev_y == y and not self.obstacle_first:
+
+            print(f"First move")
+            self.first_move = False
+            self.prev_x = x
+            self.prev_y = y
+            self.first_move = False
+            self.second_move = True
+            self.commands.append(SERVER_MOVE)
+            self.commands.append(SERVER_MOVE)
+            return SERVER_MOVE
+        if self.second_move:
+            if x == 0 and y == 0:
+                self.commands.append(SERVER_PICK_UP)
+                return SERVER_PICK_UP
+            if self.prev_x == x and self.prev_y == y and (not self.obstacle_first):
                 print(f"Second move")
                 print("Hit obstacle on first move, going around")
                 print("Cannot determine direction")
                 self.obstacle_first = True
-                self.commands.append(SERVER_TURN_LEFT)
-                return SERVER_TURN_LEFT
+                self.second_move = True
+                command = random.choice([SERVER_TURN_LEFT, SERVER_TURN_RIGHT])
+                self.commands.append(command)
+                return command
             elif self.obstacle_first:
                 print(f"Second move p2")
                 self.obstacle_first = False
@@ -228,20 +225,14 @@ class Robot:
                 self.prev_y = y
                 self.second_move = False
                 self.commands.append(SERVER_MOVE)
-                if self.direction == "N":
-                    self.expected = (x, y + 1)
-                elif self.direction == "S":
-                    self.expected = (x, y - 1)
-                elif self.direction == "W":
-                    self.expected = (x - 1, y)
-                elif self.direction == "E":
-                    self.expected = (x + 1, y)
+                self.set_expected(x, y)
                 return SERVER_MOVE
 
         if x == 0 and y == 0:
             self.commands.append(SERVER_PICK_UP)
             return SERVER_PICK_UP
-        elif self.direction is not None and self.direction != self.wanted_direction:
+        elif self.direction is not None and self.direction != self.wanted_direction \
+                and self.commands[-1:] == [SERVER_MOVE]:
             print(f"Direction is not right, wanted {self.wanted_direction}, now {self.direction}")
             if self.obstacle_dodging:
                 print(f"Wanted dir changed during dodging...")
@@ -249,10 +240,18 @@ class Robot:
             turn = self.turn_to_target()
             self.commands.append(turn)
             return turn
-        elif (x, y) != self.expected and self.expected not in self.visited \
-                and self.commands[-2:] == [SERVER_MOVE, SERVER_MOVE]:
+        elif (x, y) != self.expected \
+                and self.commands[-2:] == [SERVER_MOVE, SERVER_MOVE] and (not self.obstacle_dodging):
             print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             print(f"OBSTACLE HIT {self.expected}")
+            if x == 0 and y == 1:
+                self.dodging_moves = self.turn_to_target()
+            elif x == 1 and y == 0:
+                self.dodging_moves = self.turn_to_target()
+            else:
+                self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
+                                      SERVER_TURN_RIGHT, SERVER_MOVE]
+
             self.obstacle_dodging = True
             move = self.dodging_moves[0]
             print(f"Dodging, move now is {move}")
@@ -262,7 +261,7 @@ class Robot:
             self.commands.append(move)
             return move
         elif self.obstacle_dodging:
-            if len(self.dodging_moves) == 0:
+            if len(self.dodging_moves) <= 1:
                 self.obstacle_dodging = False
                 self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
                                       SERVER_TURN_RIGHT, SERVER_MOVE]
@@ -271,33 +270,20 @@ class Robot:
                 self.prev_x = x
                 self.prev_y = y
                 self.commands.append(SERVER_MOVE)
-                if self.direction == "N":
-                    self.expected = (x, y + 1)
-                elif self.direction == "S":
-                    self.expected = (x, y - 1)
-                elif self.direction == "W":
-                    self.expected = (x - 1, y)
-                elif self.direction == "E":
-                    self.expected = (x + 1, y)
+                self.set_expected(x, y)
                 return SERVER_MOVE
             move = self.dodging_moves[0]
             print(f"Dodging, move now is {move}")
             self.dodging_moves = self.dodging_moves[1:]
             self.prev_x = x
             self.prev_y = y
+            self.commands.append(move)
             return move
         else:
             print("Move forward:")
             print(f"{x}, {y}")
             self.prev_x = x
             self.prev_y = y
-            if self.direction == "N":
-                self.expected = (x, y + 1)
-            elif self.direction == "S":
-                self.expected = (x, y - 1)
-            elif self.direction == "W":
-                self.expected = (x - 1, y)
-            elif self.direction == "E":
-                self.expected = (x + 1, y)
+            self.set_expected(x, y)
             self.commands.append(SERVER_MOVE)
             return SERVER_MOVE

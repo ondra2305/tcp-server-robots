@@ -25,6 +25,9 @@ C_KEY2 = 13603
 C_KEY3 = 29533
 C_KEY4 = 21952
 
+S_KEYS = {0: S_KEY0, 1: S_KEY1, 2: S_KEY2, 3: S_KEY3, 4: S_KEY4}
+C_KEYS = {0: C_KEY0, 1: C_KEY1, 2: C_KEY2, 3: C_KEY3, 4: C_KEY4}
+
 PORT = 6969
 SERVER = socket.gethostbyname(socket.gethostname())
 SERVER_ADDR = (SERVER, PORT)
