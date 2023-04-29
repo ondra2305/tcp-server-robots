@@ -5,6 +5,7 @@ import numpy as np
 from config import *
 from helpers import *
 import uuid
+import time
 
 class Server:
     def __init__(self):
@@ -36,6 +37,7 @@ class Server:
         connected = True
         message = ""
         lock = threading.Lock()
+        last_was_charging = False
         while connected:
             try:
                 data = conn.recv(1024).decode(MSG_FORMAT)
@@ -43,26 +45,49 @@ class Server:
                     break
                 with lock:
                     message += data
-                messages = message.split("\a\b")
-                for i in range(len(messages) - 1):
-                    message = messages[i] + "\a\b"
-                    with lock:
-                        print(f"Message from [{addr}]: {message}, TI {thread_id}")
-                        response = self.process_data(message, thread_id, robot)
-                        conn.sendall(response.encode(MSG_FORMAT))
-                        if response in [SERVER_LOGIN_FAILED, SERVER_KEY_OUT_OF_RANGE_ERROR, SERVER_LOGIC_ERROR,
-                                        SERVER_SYNTAX_ERROR, SERVER_LOGOUT]:
-                            connected = False
-                            break
-                        elif response == SERVER_OK:
-                            conn.sendall(SERVER_MOVE.encode(MSG_FORMAT))
-                message = messages[-1]
+                while "\a\b" in message:
+                    message_parts = message.split("\a\b")
+                    message = message_parts.pop()
+                    print("Message parts:")
+                    print(message_parts)
+                    for part in message_parts:
+                        print("Part:")
+                        print(part)
+                        with lock:
+                            print(f"Last was charging? {last_was_charging}")
+                            print(f"Message from [{addr}]: {part}\a\b, TI {thread_id}")
+                            if last_was_charging and "FULL POWER" not in part:
+                                raise SyntaxError("Did not recieve FULL POWER!")
+                            last_was_charging = False
+                            if "RECHARGING" in part:
+                                conn.settimeout(5)
+                                last_was_charging = True
+                                part = part.replace("RECHARGING", "")
+                            elif "FULL POWER" in part:
+                                conn.settimeout(1)
+                                part = part.replace("FULL POWER", "")
+                            print("Part now:")
+                            print(part)
+                            if part == "":
+                                continue
+                            response = self.process_data(part + "\a\b", thread_id, robot)
+                            conn.sendall(response.encode(MSG_FORMAT))
+                            if response in [SERVER_LOGIN_FAILED, SERVER_KEY_OUT_OF_RANGE_ERROR, SERVER_LOGIC_ERROR,
+                                            SERVER_SYNTAX_ERROR, SERVER_LOGOUT]:
+                                connected = False
+                                break
+                            elif response == SERVER_OK:
+                                conn.sendall(SERVER_MOVE.encode(MSG_FORMAT))
             except socket.timeout:
                 print(f"Connection timed out for {addr}.")
+                break
+            except SyntaxError:
+                conn.sendall(SERVER_LOGIC_ERROR.encode(MSG_FORMAT))
                 break
 
         conn.close()
         print(f"Client at {addr} disconnected.")
+
     def process_data(self, data, thread_id, robot):
         messages = data.split('\a\b')
         response = SERVER_SYNTAX_ERROR

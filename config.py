@@ -29,3 +29,6 @@ PORT = 6969
 SERVER = socket.gethostbyname(socket.gethostname())
 SERVER_ADDR = (SERVER, PORT)
 MSG_FORMAT = 'utf-8'
+
+CLIENT_RECHARGING = 'RECHARGING\a\b'
+CLIENT_FULL_POWER = 'FULL POWER\a\b'
