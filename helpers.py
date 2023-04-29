@@ -63,20 +63,14 @@ class Robot:
         self.corrected = False
         self.turning_around = False
         self.obstacle_first = False
+        self.second_move = True
+        self.commands = []
 
     def get_wanted_direction(self, x, y):
         target = max(abs(x), abs(y))
 
         if abs(x) == abs(y):
-            if x > 0:
-                return 'W'
-            elif x < 0:
-                return 'E'
-            elif x == 0:
-                if y > 0:
-                    return 'S'
-                else:
-                    return 'N'
+            return self.direction
         elif target == abs(x):
             if x > 0:
                 return 'W'
@@ -180,53 +174,67 @@ class Robot:
         y = y.split('\a\b')[0]
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         print(f'My new pos: {x},{y}')
-        print(f'Direction: {self.direction}')
         x = int(x)
         y = int(y)
-        if self.direction is not None and not self.obstacle_dodging:
-            print(f"Direction based on previous: {self.get_direction(x, y)}")
+        if (not self.obstacle_dodging) and (len(self.commands) > 0):
+            if self.commands[-1:] == [SERVER_MOVE]:
+                self.direction = self.get_direction(x, y)
+                print(f"Direction: {self.get_direction(x, y)}")
 
         self.wanted_direction = self.get_wanted_direction(x, y)
         print(f"Wanted direction: {self.wanted_direction}")
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
-        if self.direction is None and not self.obstacle_dodging:
-            print(f"First move - p2")
+        if len(self.commands) > 0:
+            print(self.commands)
+
+        if self.first_move or self.second_move:
             if x == 0 and y == 0:
+                self.commands.append(SERVER_PICK_UP)
                 return SERVER_PICK_UP
             if self.first_move:
+                print(f"First move")
                 self.first_move = False
                 self.prev_x = x
                 self.prev_y = y
+                self.first_move = False
+                self.commands.append(SERVER_MOVE)
                 return SERVER_MOVE
-            if self.prev_x == x and self.prev_y == y and not self.obstacle_first:
+            elif self.prev_x == x and self.prev_y == y and not self.obstacle_first:
+                print(f"Second move")
                 print("Hit obstacle on first move, going around")
                 print("Cannot determine direction")
                 self.obstacle_first = True
-                self.prev_x = x
-                self.prev_y = y
+                self.commands.append(SERVER_TURN_LEFT)
                 return SERVER_TURN_LEFT
             elif self.obstacle_first:
+                print(f"Second move p2")
+                self.obstacle_first = False
+                self.second_move = False
                 self.prev_x = x
                 self.prev_y = y
-                self.obstacle_first = False
+                self.commands.append(SERVER_MOVE)
                 return SERVER_MOVE
             else:
+                print(f"Second move")
                 self.direction = self.get_direction(x, y)
                 self.wanted_direction = self.get_wanted_direction(x, y)
                 self.prev_x = x
                 self.prev_y = y
+                self.second_move = False
+                self.commands.append(SERVER_MOVE)
                 return SERVER_MOVE
 
-        elif self.direction is None and self.obstacle_dodging:
-            self.obstacle_dodging = False
-            self.prev_x = x
-            self.prev_y = y
-            return SERVER_MOVE
-
         if x == 0 and y == 0:
+            self.commands.append(SERVER_PICK_UP)
             return SERVER_PICK_UP
-        elif self.prev_x == x and self.prev_y == y and not self.obstacle_dodging:
+        elif self.direction is not None and self.direction != self.wanted_direction:
+            print(f"Direction is not right, wanted {self.wanted_direction}, now {self.direction}")
+            turn = self.turn_to_target()
+            self.commands.append(turn)
+            return turn
+        elif self.prev_x == x and self.prev_y == y and (not self.obstacle_dodging) \
+                and self.commands[-1:] == [SERVER_MOVE]:
             print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             print(f"OBSTACLE HIT {x} {y}")
             self.obstacle_dodging = True
@@ -235,46 +243,29 @@ class Robot:
             self.dodging_moves = self.dodging_moves[1:]
             self.prev_x = x
             self.prev_y = y
+            self.commands.append(move)
             return move
         elif self.obstacle_dodging:
-            if len(self.dodging_moves) == 0:
+            if len(self.dodging_moves) == 1:
                 self.obstacle_dodging = False
                 self.dodging_moves = [SERVER_TURN_LEFT, SERVER_MOVE, SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_MOVE,
                                       SERVER_TURN_RIGHT, SERVER_MOVE, SERVER_TURN_LEFT]
-                print("Dodging complete, moving forward")
+                print("Dodging complete")
                 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-
                 self.prev_x = x
                 self.prev_y = y
-                return SERVER_MOVE
+                self.commands.append(SERVER_TURN_LEFT)
+                return SERVER_TURN_LEFT
             move = self.dodging_moves[0]
             print(f"Dodging, move now is {move}")
             self.dodging_moves = self.dodging_moves[1:]
             self.prev_x = x
             self.prev_y = y
             return move
-        elif self.direction != self.wanted_direction:
-            print(f"Direction is not right, wanted {self.wanted_direction}, now {self.direction}")
-            return self.turn_to_target()
         else:
             print("Move forward:")
             print(f"{x}, {y}")
-            """
-            if (x == 0 or y == 0) and not self.corrected:
-                print("Hit 0 on one of the axis")
-                self.wanted_direction = self.get_wanted_direction(x, y)
-                print(f"Wanted dir: {self.wanted_direction}")
-
-                if self.direction != self.wanted_direction:
-                    self.corrected = True
-                    return self.turn_to_target()
-                else:
-                    print("Orientation correct")
-                    self.prev_x = x
-                    self.prev_y = y
-                    return SERVER_MOVE
-            else:
-            """
             self.prev_x = x
             self.prev_y = y
+            self.commands.append(SERVER_MOVE)
             return SERVER_MOVE
