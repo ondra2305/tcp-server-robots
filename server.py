@@ -49,7 +49,7 @@ class Server:
                             if len(message) >= 19:
                                 raise SyntaxError("Wrong username!")
                         elif self.connected_clients[thread_id]['con_state'] == 'move':
-                            if len(message) >= 11:
+                            if len(message) >= 12:
                                 raise SyntaxError("Confirmation too long!")
                         elif self.connected_clients[thread_id]['con_state'] == 'pickup':
                             if len(message) >= 99:
